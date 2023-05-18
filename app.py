@@ -11,6 +11,7 @@ from wtforms.validators import DataRequired
 
 
 app = Flask(__name__)
+
 app.config['SECRET_KEY'] = 'mysecretkey'
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///mybank.db'
 
@@ -64,3 +65,5 @@ def register():
             db.session.commit()
             return 'Registered successfully!'
         return render_template('register.html', form=form)
+    
+def main():
