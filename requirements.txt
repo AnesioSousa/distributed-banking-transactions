@@ -1,2 +1,7 @@
 Flask
 jsonify
+Jinja2
+click
+MarkupSafe
+Werkzeug
+itsdangerous
