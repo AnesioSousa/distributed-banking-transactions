@@ -1,5 +1,5 @@
 import uuid
-from lamportclock import Vector_Clock
+from app.models.lamportclock import Vector_Clock
 
 
 class Transaction:

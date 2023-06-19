@@ -2,7 +2,8 @@ import config as conf
 
 
 class Vector_Clock:
-    def __init__(self, peer_number=int(conf.PROCESSES_QUANTITY)):
+    def __init__(self, id: int, peer_number: int):
+        self.id = id
         self.peer_number = peer_number
         self.clock = [0 for i in range(self.peer_number)]
 

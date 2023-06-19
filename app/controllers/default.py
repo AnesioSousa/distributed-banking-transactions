@@ -1,7 +1,17 @@
+import asyncio
 from app import app
 from flask import jsonify, request, render_template
 from app.account import Account
-
+import requests
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric import padding
+from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives.serialization import load_pem_private_key
+from cryptography.hazmat.primitives.serialization import load_pem_public_key
+from app.models.lamportclock import Vector_Clock
+import socket
+import json
 
 # Casos na comunicação entre bancos:
 # - Conta no Banco A manda pix para conta no Banco B
@@ -9,9 +19,23 @@ from app.account import Account
 
 # É importante colocar também o banco?
 # Quando uso chaves invés de colchetes da esse erro: <TypeError: unhashable type: 'dict'>
-accounts = [
-    {
-        'id': 1,
+
+banks = {
+    1: {
+        'name': 'Banco Santander',
+        'host': 'localhost',
+        'port': 5002
+    },
+    2: {
+        'name': 'Nubank',
+        'host': 'localhost',
+        'port': 5003
+    }
+}
+
+
+accounts = {
+    0: {
         'name': 'Roberto Firmino da Silva Siqueira',
         'account_number': '140110-5',
         'account_type': 'particular',
@@ -19,9 +43,7 @@ accounts = [
         'cpf': '836.715.920-11',
         'password': '1234'
     },
-
-    {
-        'id': 2,
+    1: {
         'name': 'Gundogan Pereira dos Santos',
         'account_number': '136114-0',
         'account_type': 'particular',
@@ -29,16 +51,17 @@ accounts = [
         'cpf': '498.623.780-85',
         'password': '1234'
     },
-    {
-        'id': 3,
+    2: {
         'name': 'Pep Guardiola Neto',
         'account_number': '771324-12',
         'account_type': 'particular',
-        'balance': '4527.12',
+        'balance': 4527.12,
         'cpf': '128.960.537-42',
         'password': '1234'
     }
-]
+}
+
+my_clock = Vector_Clock(0, 3)
 
 
 @app.route('/index/<user>', methods=['GET'])
@@ -46,13 +69,13 @@ accounts = [
 @app.route('/index', methods=['GET'], defaults={'user': None})
 @app.route('/', methods=['GET'], defaults={'user': None})
 def index(user):
-    return render_template('base.html',
-                           user=user)
+    my_clock.event()
+    return "HELLO"
 
 
-@app.route("/signup", methods=['POST'])
+@app.route("/login", methods=['POST'])
 def login():
-
+    my_clock.event()
     data = request.get_json()
 
     id = data["id"]
@@ -67,7 +90,7 @@ def login():
     if id == 3:
         return "Peguei você!"
 
-    return render_template('index.html')
+    return render_template('login.html')
 
 # Consultar todas as contas
 
@@ -75,20 +98,23 @@ def login():
 @app.route('/accounts/', methods=['GET'])
 @app.route('/accounts', methods=['GET'])
 def obtein_accounts():
+    my_clock.event()
     return jsonify(accounts)
+
+
+@app.route("/lastEvent", methods=['GET'])
+def get_clock():
+    return jsonify({"event": my_clock.clock})
 
 # Consultar uma conta dado um id
 
 
 @app.route('/accounts/<int:id>', methods=['GET'])
 def get_account_by_id(id):
-    for account in accounts:
-        if account.get('id') == id:
-            return jsonify(account)
+    return jsonify(accounts[id])
 
 
 # Atualizar os dados de uma conta dado um id
-
 ''
 
 
@@ -121,35 +147,99 @@ def delete_account(id):
 
     return jsonify(accounts)
 
-# função Valida a chave
+
+@app.route("/accounts/transaction", methods=['POST'])
+def transaction():
+    my_clock.event()
+    data = request.get_json()
+
+    from_account = int(data["de_id"])
+    to_account = int(data["account_id"])
+    value = float(data["value"])
+
+    url = 'http://127.0.0.1:5001/accounts/increase'
+
+    message = {
+        "account": to_account,
+        "value": value
+    }
+
+    # Tem que continuar tentando. Não pode executar nada além daqui (Atomicidade)
+    response = requests.post(url, json=message)
+    res_data = response.json()
+
+    if response.ok:
+        accounts[from_account]["balance"] -= value
+
+        return jsonify(res_data)
+
+    return jsonify({"error": 'some error occurred'})
 
 
-def validate_key(key):
-    # Preciso da signature aqui
-    pass
+@app.route("/accounts/increase", methods=['POST'])
+def increase():
+    data = request.get_json()
+
+    account = int(data["account"])
+    value = float(data["value"])
+
+    accounts[account]["balance"] += value
+    return jsonify(accounts[account]), 200
 
 
-@app.route('/accounts/<int:id>/newkey')
-def generate_random_pix_key(id):
+# um cliente pode tranferir dinheiro entre contas de bancos diferentes
+@app.route('/bank/delegate_transfer', methods=['POST'])
+def delegate_transfer():
+    my_clock.event()
 
     data = request.get_json()
-    id = data["id"]
 
-    # se existir uma conta com esse id
-    if id:
-        return make_pix_key(data["cpf"])
+    bank_c = request.remote_addr
+    bank_c_port = request.environ.get('REMOTE_PORT')
+
+    bank_a = data["sender_bank"]
+    bank_a_sender_account = data["sender_account"]
+    # IDEIA: Usar chaves pix -> pix_key = data["receiver_pix_key"]
+    bank_b_account_id = data["account_id"]
+    value = data["value"]
+
+    bank = banks[bank_a]
+    print(bank["host"]+':'+str(bank["port"]))
+    url = f'http://{bank["host"]}:{bank["port"]}/'
+
+    message = {
+        "requester_bank": 0,
+        "clock": my_clock.clock,
+        "sender_account": bank_a_sender_account,
+        "pix_key": bank_b_account_id,
+        "value": value
+    }
+
+    response = requests.post(url, json=message)
+
+    if response.status_code == 200:
+        return
+    else:
+        pass
+
+    ip = socket.gethostbyname(socket.gethostname())
+
+    data = {
+        "host": ip,
+    }
+
+    headers = {'Content-Type': 'application/json'}
+    payload = json.dumps(data)
+
+    response = requests.post(url_destino, data=payload, headers=headers)
+
+    return r.json()
+
+    # é 404 msm? Acho que tem que ser erro do cliente!
 
 
-def make_pix_key(cpf):
-    # Bcrypt aqui?
-    pass
+def get_user_by_pix_key(key):
 
+    return "id"
 
-# Ciclo de uma transação de envio:
-# - Cliente logado solicita enviar pix
-# - Checar saldo
-# - Se sa
-
-# @app.route('/accounts/<int: id>/value')
-def send_pix():
-    pass
+#
