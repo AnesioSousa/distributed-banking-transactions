@@ -73,7 +73,7 @@ def index(user):
     return "HELLO"
 
 
-@app.route("/login", methods=['POST'])
+@app.route("/login", methods=['POST', 'GET'])
 def login():
     my_clock.event()
     data = request.get_json()
@@ -111,6 +111,10 @@ def get_clock():
 
 @app.route('/accounts/<int:id>', methods=['GET'])
 def get_account_by_id(id):
+    return account_by_id(id)
+
+
+def account_by_id(id):
     return jsonify(accounts[id])
 
 
@@ -122,7 +126,7 @@ def get_account_by_id(id):
 def edit_account_by_id(id):
     changed_account = request.get_json()
     for index, account in enumerate(accounts):
-        if account.get('id') == id:
+        if account_by_id(id) == id:
             accounts[index].update(changed_account)
             return jsonify(accounts[index])
 
@@ -136,9 +140,79 @@ def add_new_account():
 
     return jsonify(accounts)
 
+
+def get_bank_by_user_id():
+    pass
+
+
+@app.route("/accounts/deposit", methods=["POST"])
+def deposit():
+    data = request.get_json()
+    to_account = int(data["account_id"])
+    value = float(data["value"])
+
+    account_exists_here = to_account in accounts
+    if account_exists_here:
+        account = accounts[to_account]
+        account["balance"] += float(data["value"])  # Tá sa
+        return jsonify(account)
+
+    return jsonify({"error": "Account doesnt exist in this bank!"})
+
+
+@app.route("/accounts/transactions", methods=["POST"])
+def transactions():
+    data = request.get_json()
+    # Já dá pra incorporar aqui a delegação.
+
+    from_account = int(data["from_account_id"])
+    to_account = int(data["to_account_id"])
+    value = float(data["value"])
+    # Se a conta é desse banco
+    # Se não é, de onde é? Vou precisar saber o banco pra poder conversar com ele
+
+    from_bank = get_bank_by_user_id(from_account)
+    to_bank = get_bank_by_user_id(to_account)
+
+    # Tem que separar os casos de chegada de requisição aqui. Tá misturando tudo. Casos:
+    #
+
+    if from_bank == 0:  # O próprio
+        # if from_account == to_account:
+        account_exists_here = to_account in accounts
+        if account_exists_here:
+            account = accounts[to_account]
+
+            if data["increase"]:  # É de quem está mandando!
+                r = requests.post()
+                deposit(account, value)
+                account["balance"] += float(data["value"])  # Tá sa
+
+            else:
+                account["balance"] -= float(data["value"])
+            return jsonify(account)  # Já retorna direto o 200?
+        else:
+            return jsonify({"error": "Account doesnt exist in this bank!"})
+            # Depósito
+    else:
+        # Onde entra o broadcast? (se for preciso usar)
+        url = f'http://{banks[from_bank]}:5000/transaction'
+
+        message = {
+            "from_account_id": from_account,
+            "to_account_id": to_account,
+            "value": value
+        }
+
+        # Verificar atomicidade
+        r = requests.post(url, json=message)
+
+        # if r.ok:
+
+    return jsonify({"error": 'some error occurred'})
+
+
 # Excluir uma conta
-
-
 @app.route('/accounts/<int:id>', methods=['DELETE'])
 def delete_account(id):
     for index, account in enumerate(accounts):
@@ -150,11 +224,10 @@ def delete_account(id):
 
 @app.route("/accounts/transaction", methods=['POST'])
 def transaction():
-    my_clock.event()
     data = request.get_json()
 
-    from_account = int(data["de_id"])
-    to_account = int(data["account_id"])
+    from_account = int(data["from_account"])
+    to_account = int(data["to_account_id"])
     value = float(data["value"])
 
     url = 'http://127.0.0.1:5001/accounts/increase'
@@ -174,17 +247,6 @@ def transaction():
         return jsonify(res_data)
 
     return jsonify({"error": 'some error occurred'})
-
-
-@app.route("/accounts/increase", methods=['POST'])
-def increase():
-    data = request.get_json()
-
-    account = int(data["account"])
-    value = float(data["value"])
-
-    accounts[account]["balance"] += value
-    return jsonify(accounts[account]), 200
 
 
 # um cliente pode tranferir dinheiro entre contas de bancos diferentes
@@ -236,10 +298,5 @@ def delegate_transfer():
     return r.json()
 
     # é 404 msm? Acho que tem que ser erro do cliente!
-
-
-def get_user_by_pix_key(key):
-
-    return "id"
 
 #
