@@ -48,24 +48,24 @@ my_clock = Vector_Clock(0, 3)
 @app.route('/', methods=['GET'], defaults={'user': None})
 def index(user):
     my_clock.event()
-    return "HELLO"
+    return "HELLO " + str(user)
 
 
-@app.route("/login", methods=['POST', 'GET'])
+@app.route("/login", methods=['POST'])
 def login():
     my_clock.event()
     data = request.get_json()
 
-    id = data["id"]
+    """id = data["id"]
     account_number = data["account_number"]
     balance = data["balance"]
     name = data["name"]
     password = data["password"]
     cpf = data["cpf"]
 
-    aux_acc = Account(id, account_number, balance, name, password, cpf)
+    aux_acc = Account(id, account_number, balance, name, password, cpf)"""
 
-    return render_template('login.html')
+    # return render_template('login.html')
 
 
 @app.route("/lastEvent", methods=['GET'])

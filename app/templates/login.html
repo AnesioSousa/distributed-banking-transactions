@@ -18,7 +18,7 @@
 </head>
 
 <body class="text-center">
-    <form class="form-signin">
+    <form class="form-signin" id="myForm">
         <img class="mb-4" src="https://getbootstrap.com/docs/4.0/assets/brand/bootstrap-solid.svg" alt="" width="72"
             height="72">
         <h1 class="h3 mb-3 font-weight-normal">Please sign in</h1>
@@ -27,7 +27,7 @@
         <input type="account" id="inputAccount" class="form-control" placeholder="Account" required autofocus>
         <label for="inputPassword" class="sr-only">Password</label>
         <input type="password" id="inputPassword" class="form-control" placeholder="Password" required>
-        <div class="checkbox mb-3">
+        <div class="checkbox mb-4">
             <label>
                 <input type="checkbox" value="remember-me"> Remember me
             </label>
@@ -35,6 +35,30 @@
         <button class="btn btn-lg btn-primary btn-block" type="submit">Sign in</button>
         <p class="mt-5 mb-3 text-muted">&copy; 2017-2018</p>
     </form>
+
+    <script>
+        const form = document.getElementById('myForm');
+        form.addEventListener('submit', (event) => {
+            event.preventDefault(); // Prevent the form from being submitted normally
+
+            const formData = new FormData(form); // Create a new FormData object from the form
+
+            fetch('http://localhost:5000/login', {
+                method: 'POST',
+                body: formData
+            })
+                .then(response => response.json())
+                .then(data => {
+                    //handle the response from the API
+                    console.log(data);
+                })
+                .catch(error => {
+                    // Handle any errors that occurred during the request
+                    console.error('Error:', error);
+                });
+
+        });
+    </script>
     <!-- jQuery (necessary for Bootstrap's JavasCript plugins) -->
     <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js"
         integrity="sha384-q8i/X+965DzO0rT7abK41JStQIAqVgRVzpbzo5smXKp4YfRvH+8abtTE1Pi6jizo"
